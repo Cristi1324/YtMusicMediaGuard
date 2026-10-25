@@ -120,6 +120,8 @@ Press Volume Up or Volume Down. Windows volume should stay put and the YouTube M
 
 **Play or pause fires twice.** Chrome's hardware media-key handling and another shortcut both toggled playback. Open `chrome://flags/#hardware-media-key-handling`, set **Hardware Media Key Handling** to **Disabled**, and relaunch Chrome.
 
+**The pause button shows paused, but the song keeps playing.** YouTube Music updates the button without pausing the video. Reload this extension on `chrome://extensions`, then reload the YouTube Music tab. The extension pauses the video when the button says paused and the video is still advancing.
+
 **Nothing happens while a game is focused.** If Windows shows a permission prompt, choose **Yes**. That installs the helper used for administrator games. Read `guard.log`. A line that the elevated hook was not allowed means the prompt was declined; start the tray app again and accept it. A windowed game that Windows has never marked as a game, and that does not cover the screen, is left on the normal path: volume goes to YouTube Music, and play, next, and previous stay with Chrome.
 
 **Remote Desktop still receives the keys.** The focused program is not `mstsc.exe`, `msrdc.exe`, or `vmconnect.exe`. TeamViewer, AnyDesk, and nested Remote Desktop sessions are not treated as Remote Desktop. If the extension is not connected, the guard drops the key instead of typing it into the remote session.
