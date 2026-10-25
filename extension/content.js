@@ -88,82 +88,88 @@ function playingVideo() {
   return collectVideos().find((video) => !video.paused && !video.ended) || null;
 }
 
-function buttonClaimsPaused() {
-  const button = queryPlayer(["ytmusic-player-bar #play-pause-button", "#play-pause-button"]);
-  if (!button) return null;
-  const inner = button.shadowRoot?.querySelector("button, tp-yt-paper-icon-button") || button.querySelector("button, tp-yt-paper-icon-button");
-  const label = [button, inner]
-    .filter(Boolean)
-    .map((node) => `${node.getAttribute?.("aria-label") || ""} ${node.getAttribute?.("title") || ""}`)
-    .join(" ")
-    .toLowerCase();
-  if (label.includes("pause")) return false;
-  if (label.includes("play")) return true;
-
-  const icon = [button, inner]
-    .filter(Boolean)
-    .map((node) => `${node.icon || ""} ${node.getAttribute?.("icon") || ""}`)
-    .join(" ")
-    .toLowerCase();
-  if (icon.includes("pause")) return false;
-  if (icon.includes("play")) return true;
-  return null;
-}
-
-function uiClaimsPaused() {
-  const fromButton = buttonClaimsPaused();
-  if (fromButton !== null) return fromButton;
-  const state = playerApi()?.getPlayerState?.();
-  return state === 2 || state === 5;
-}
-
 let holdPaused = false;
+let wantPaused = null;
+let reapplyTimer = 0;
 
-function pauseVideos() {
-  holdPaused = true;
-  for (const video of collectVideos()) {
-    if (!video.paused && !video.ended) video.pause();
+function callPlayer(paused) {
+  const player = playerApi();
+  if (!player) return;
+  const name = paused
+    ? (typeof player.pauseVideo === "function" ? "pauseVideo" : "pause")
+    : (typeof player.playVideo === "function" ? "playVideo" : "play");
+  try {
+    player[name]?.();
+  } catch {
+    // The player button can be missing while a track is changing.
   }
 }
 
-function playVideos() {
-  holdPaused = false;
-  const video = collectVideos().find((item) => item.paused && !item.ended) || collectVideos()[0];
-  if (!video) return;
-  video.play().catch(() => {});
-}
-
-function syncToButton(allowPlay) {
-  const paused = uiClaimsPaused();
-  if (paused === true) {
-    pauseVideos();
+function applyWanted() {
+  if (wantPaused) {
+    holdPaused = true;
+    callPlayer(true);
+    for (const video of collectVideos()) {
+      if (!video.paused && !video.ended) video.pause();
+    }
     return;
   }
-  if (paused === false && allowPlay) playVideos();
-  else if (paused === false) holdPaused = false;
+
+  holdPaused = false;
+  callPlayer(false);
+  const video = collectVideos().find((item) => !item.ended);
+  if (video?.paused) video.play().catch(() => {});
 }
 
-let syncTimer = 0;
+function toggleActual() {
+  if (wantPaused === null) wantPaused = Boolean(playingVideo());
+  else wantPaused = !wantPaused;
+  applyWanted();
+  clearTimeout(reapplyTimer);
+  reapplyTimer = setTimeout(applyWanted, 200);
+}
+
+function hitsPlayPause(event) {
+  const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  return path.some((node) => node?.id === "play-pause-button") || Boolean(event.target?.closest?.("#play-pause-button"));
+}
+
+let lastToggle = 0;
+
+function swallowPlayPause(event) {
+  if (!hitsPlayPause(event)) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  return true;
+}
+
+function toggleFromPress(event) {
+  if (!swallowPlayPause(event)) return;
+  const now = performance.now();
+  if (now - lastToggle < 90) return;
+  lastToggle = now;
+  toggleActual();
+}
 
 function togglePlayback() {
-  if (playingVideo()) {
-    pauseVideos();
-    return true;
+  if (!collectVideos().length && !playerApi()) {
+    return clickControl(["ytmusic-player-bar #play-pause-button", "#play-pause-button"]);
   }
-  if (collectVideos().length || playerApi()) {
-    playVideos();
-    return true;
-  }
-  return clickControl(["ytmusic-player-bar #play-pause-button", "#play-pause-button"]);
+  toggleActual();
+  return true;
 }
 
 function installMediaSession() {
   const session = navigator.mediaSession;
   if (!session?.setActionHandler) return;
   try {
-    session.setActionHandler("pause", () => pauseVideos());
-    session.setActionHandler("stop", () => pauseVideos());
-    session.setActionHandler("play", () => playVideos());
+    session.setActionHandler("pause", () => toggleActual());
+    session.setActionHandler("play", () => toggleActual());
+    session.setActionHandler("stop", () => {
+      wantPaused = true;
+      applyWanted();
+    });
   } catch {
     // The page can replace these handlers. The interval below installs them again.
   }
@@ -223,21 +229,12 @@ if (!globalThis.__ytMusicGuardListening) {
     return true;
   });
 
-  document.addEventListener(
-    "click",
-    (event) => {
-      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-      const hit = path.some((node) => node?.id === "play-pause-button") || event.target?.closest?.("#play-pause-button");
-      if (!hit) return;
-      const wasPlaying = Boolean(playingVideo());
-      clearTimeout(syncTimer);
-      syncTimer = setTimeout(() => {
-        if (wasPlaying) pauseVideos();
-        else playVideos();
-      }, 120);
-    },
-    true,
-  );
+  for (const type of ["pointerdown", "mousedown", "mouseup"]) {
+    document.addEventListener(type, swallowPlayPause, true);
+  }
+  for (const type of ["pointerup", "click", "auxclick"]) {
+    document.addEventListener(type, toggleFromPress, true);
+  }
 
   document.addEventListener(
     "play",
@@ -245,14 +242,6 @@ if (!globalThis.__ytMusicGuardListening) {
       if (!holdPaused || !(event.target instanceof HTMLVideoElement)) return;
       event.stopImmediatePropagation();
       event.target.pause();
-    },
-    true,
-  );
-
-  document.addEventListener(
-    "timeupdate",
-    (event) => {
-      if (event.target instanceof HTMLVideoElement && !event.target.paused) syncToButton(false);
     },
     true,
   );

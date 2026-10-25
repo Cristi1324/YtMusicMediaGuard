@@ -120,7 +120,7 @@ Press Volume Up or Volume Down. Windows volume should stay put and the YouTube M
 
 **Play or pause fires twice.** Chrome's hardware media-key handling and another shortcut both toggled playback. Open `chrome://flags/#hardware-media-key-handling`, set **Hardware Media Key Handling** to **Disabled**, and relaunch Chrome.
 
-**The pause button shows paused, but the song keeps playing.** YouTube Music updates the button without pausing the video, and another press can start it again. Reload this extension on `chrome://extensions` until its version is **1.0.2**, then reload the YouTube Music tab. The extension holds the video paused while that button says paused.
+**The pause button shows paused, but the song keeps playing.** YouTube Music flips the play/pause button without keeping the video in step, especially after several presses. Reload this extension on `chrome://extensions` until its version is **1.0.3**, then reload the YouTube Music tab. Each press toggles the video itself.
 
 **Nothing happens while a game is focused.** If Windows shows a permission prompt, choose **Yes**. That installs the helper used for administrator games. Read `guard.log`. A line that the elevated hook was not allowed means the prompt was declined; start the tray app again and accept it. A windowed game that Windows has never marked as a game, and that does not cover the screen, is left on the normal path: volume goes to YouTube Music, and play, next, and previous stay with Chrome.
 
