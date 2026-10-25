@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Music Media Key Guard",
+  "version": "1.0.0",
+  "description": "Tells the media key guard when a YouTube Music tab is open, and controls playback while Remote Desktop is focused.",
+  "permissions": ["tabs", "nativeMessaging", "scripting", "alarms", "storage"],
+  "host_permissions": ["*://music.youtube.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://music.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsHuHiDondhyFmb/9ewMRSOdQe3QZw+572cTNC3CjSdVMssUKK0KbhlGv5eXpThKwj295X/NTW5u5j4Bz0xIODv9eaASFgDjmXZIsjIDXIgAzVDJKhtMUds6oDF+lG6084jtSBmRHxZzBk11+TpMMKNJODgqWTFbXgisP9bLBV6FEuFlZLCpyP3O4XRCbkxQYEqsYz2NXSxVNJXi7GbwhEhobuslwdUahqVIE/f78vMgwqsJrfACQL2WcXbJJ5GwF1+9wVl8yRG5hS3qcH2yOrb9rQc/aaTERDU2JNaUDIa5jV7Q2E43lAc9vpaaCshRaQY4BchhA/IVdcn/CDjn8xQIDAQAB"
+}

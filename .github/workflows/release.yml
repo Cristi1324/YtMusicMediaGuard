@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build the Windows package
+        shell: pwsh
+        run: ./publish.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YtMusicMediaGuard-win-x64
+          path: dist/YtMusicMediaGuard-win-x64.zip
+
+      - name: Attach the package to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: >
+          gh release create "${{ github.ref_name }}"
+          dist/YtMusicMediaGuard-win-x64.zip
+          --title "${{ github.ref_name }}"
+          --notes "Windows build. Load the extension folder in this zip, or the extension folder in the repository, as an unpacked extension."

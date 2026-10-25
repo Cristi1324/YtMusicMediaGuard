@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace>YtMusicMediaGuard</RootNamespace>
+    <AssemblyName>YtMusicMediaGuard</AssemblyName>
+    <Version>1.0.0</Version>
+    <Description>Keeps Windows media keys for YouTube Music while a tab is open.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\extension\manifest.json" Link="extension\manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\extension\background.js" Link="extension\background.js" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\extension\content.js" Link="extension\content.js" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
