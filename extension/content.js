@@ -57,61 +57,56 @@ function stepVolume(delta) {
 }
 
 function playerApi() {
-  const hosts = [document.querySelector("ytmusic-player"), document.querySelector("#movie_player")];
-  for (const host of hosts) {
-    if (!host) continue;
-    const api = host.playerApi || host;
-    if (typeof api.pauseVideo === "function" || typeof api.playVideo === "function") return api;
-  }
+  const host = document.querySelector("ytmusic-player");
+  const api = host?.playerApi;
+  if (api && (typeof api.pause === "function" || typeof api.pauseVideo === "function" || typeof api.play === "function" || typeof api.playVideo === "function"))
+    return api;
+  const movie = document.querySelector("#movie_player");
+  if (movie && (typeof movie.pauseVideo === "function" || typeof movie.playVideo === "function")) return movie;
   return null;
+}
+
+function addVideos(node, videos) {
+  if (!node?.querySelectorAll) return;
+  if (node instanceof HTMLVideoElement) videos.add(node);
+  for (const video of node.querySelectorAll("video")) videos.add(video);
+  for (const element of node.querySelectorAll("*")) {
+    if (element.shadowRoot) addVideos(element.shadowRoot, videos);
+  }
+}
+
+function collectVideos() {
+  const videos = new Set(document.querySelectorAll("video"));
+  for (const host of document.querySelectorAll("ytmusic-player, #movie_player, .html5-video-player")) {
+    addVideos(host, videos);
+    if (host.shadowRoot) addVideos(host.shadowRoot, videos);
+  }
+  return [...videos];
 }
 
 function playingVideo() {
-  for (const video of document.querySelectorAll("video")) {
-    if (!video.paused && !video.ended) return video;
-  }
-  return null;
-}
-
-function visitControl(root, visit) {
-  const pending = [root];
-  const seen = new Set();
-  while (pending.length) {
-    const node = pending.pop();
-    if (!node || seen.has(node)) continue;
-    seen.add(node);
-    visit(node);
-    if (node.shadowRoot) pending.push(node.shadowRoot);
-    if (!node.querySelectorAll) continue;
-    for (const child of node.querySelectorAll("*")) pending.push(child);
-  }
+  return collectVideos().find((video) => !video.paused && !video.ended) || null;
 }
 
 function buttonClaimsPaused() {
   const button = queryPlayer(["ytmusic-player-bar #play-pause-button", "#play-pause-button"]);
   if (!button) return null;
-  const icons = [];
-  const labels = [];
-  const paths = [];
-  visitControl(button, (node) => {
-    if (node.nodeType !== 1) return;
-    const icon = `${node.icon || ""} ${node.getAttribute("icon") || ""}`.trim().toLowerCase();
-    if (icon) icons.push(icon);
-    const label = `${node.getAttribute("aria-label") || ""} ${node.getAttribute("title") || ""}`.trim().toLowerCase();
-    if (label) labels.push(label);
-    const path = node.getAttribute("d");
-    if (path) paths.push(path);
-  });
+  const inner = button.shadowRoot?.querySelector("button, tp-yt-paper-icon-button") || button.querySelector("button, tp-yt-paper-icon-button");
+  const label = [button, inner]
+    .filter(Boolean)
+    .map((node) => `${node.getAttribute?.("aria-label") || ""} ${node.getAttribute?.("title") || ""}`)
+    .join(" ")
+    .toLowerCase();
+  if (label.includes("pause")) return false;
+  if (label.includes("play")) return true;
 
-  const iconText = icons.join(" ");
-  if (iconText.includes("pause")) return false;
-  if (iconText.includes("play")) return true;
-  const drawn = paths.join(" ");
-  if (drawn.includes("h4V5")) return false;
-  if (drawn.includes("l11-7")) return true;
-  const labelText = labels.join(" ");
-  if (labelText.includes("pause")) return false;
-  if (/\bplay\b/.test(labelText)) return true;
+  const icon = [button, inner]
+    .filter(Boolean)
+    .map((node) => `${node.icon || ""} ${node.getAttribute?.("icon") || ""}`)
+    .join(" ")
+    .toLowerCase();
+  if (icon.includes("pause")) return false;
+  if (icon.includes("play")) return true;
   return null;
 }
 
@@ -122,50 +117,56 @@ function uiClaimsPaused() {
   return state === 2 || state === 5;
 }
 
-function forcePause(preferred) {
-  const player = playerApi();
-  if (typeof player?.pauseVideo === "function") player.pauseVideo();
-  for (const video of [preferred, playingVideo()]) {
-    if (video && !video.paused) video.pause();
+let holdPaused = false;
+
+function pauseVideos() {
+  holdPaused = true;
+  for (const video of collectVideos()) {
+    if (!video.paused && !video.ended) video.pause();
   }
 }
 
-function forcePlay() {
-  const player = playerApi();
-  if (typeof player?.playVideo === "function") player.playVideo();
-  const video = document.querySelector("video");
-  if (video?.paused) video.play().catch(() => {});
+function playVideos() {
+  holdPaused = false;
+  const video = collectVideos().find((item) => item.paused && !item.ended) || collectVideos()[0];
+  if (!video) return;
+  video.play().catch(() => {});
 }
 
-function togglePlayback() {
-  const video = playingVideo() || document.querySelector("video");
-  const player = playerApi();
-  if (!video && !player) {
-    return clickControl(["ytmusic-player-bar #play-pause-button", "#play-pause-button"]);
-  }
-
-  const playing = video ? !video.paused && !video.ended : player.getPlayerState?.() === 1;
-  if (playing) forcePause(video);
-  else forcePlay();
-  return true;
-}
-
-let disagreeSince = 0;
-let pauseFixes = 0;
-
-function correctStuckPause(video) {
-  const stuck = video && !video.paused && !video.ended && uiClaimsPaused();
-  if (!stuck) {
-    disagreeSince = 0;
-    pauseFixes = 0;
+function syncToButton(allowPlay) {
+  const paused = uiClaimsPaused();
+  if (paused === true) {
+    pauseVideos();
     return;
   }
+  if (paused === false && allowPlay) playVideos();
+  else if (paused === false) holdPaused = false;
+}
 
-  const now = performance.now();
-  if (disagreeSince === 0) disagreeSince = now;
-  if (now - disagreeSince < 300 || pauseFixes >= 5) return;
-  pauseFixes += 1;
-  forcePause(video);
+let syncTimer = 0;
+
+function togglePlayback() {
+  if (playingVideo()) {
+    pauseVideos();
+    return true;
+  }
+  if (collectVideos().length || playerApi()) {
+    playVideos();
+    return true;
+  }
+  return clickControl(["ytmusic-player-bar #play-pause-button", "#play-pause-button"]);
+}
+
+function installMediaSession() {
+  const session = navigator.mediaSession;
+  if (!session?.setActionHandler) return;
+  try {
+    session.setActionHandler("pause", () => pauseVideos());
+    session.setActionHandler("stop", () => pauseVideos());
+    session.setActionHandler("play", () => playVideos());
+  } catch {
+    // The page can replace these handlers. The interval below installs them again.
+  }
 }
 
 function toggleMute() {
@@ -227,14 +228,23 @@ if (!globalThis.__ytMusicGuardListening) {
     (event) => {
       const path = typeof event.composedPath === "function" ? event.composedPath() : [];
       const hit = path.some((node) => node?.id === "play-pause-button") || event.target?.closest?.("#play-pause-button");
-      const video = playingVideo();
-      if (!hit || !video) return;
-      const settle = () => {
-        const current = playingVideo();
-        if (current) forcePause(current);
-      };
-      setTimeout(settle, 80);
-      setTimeout(settle, 300);
+      if (!hit) return;
+      const wasPlaying = Boolean(playingVideo());
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        if (wasPlaying) pauseVideos();
+        else playVideos();
+      }, 120);
+    },
+    true,
+  );
+
+  document.addEventListener(
+    "play",
+    (event) => {
+      if (!holdPaused || !(event.target instanceof HTMLVideoElement)) return;
+      event.stopImmediatePropagation();
+      event.target.pause();
     },
     true,
   );
@@ -242,8 +252,11 @@ if (!globalThis.__ytMusicGuardListening) {
   document.addEventListener(
     "timeupdate",
     (event) => {
-      if (event.target instanceof HTMLVideoElement) correctStuckPause(event.target);
+      if (event.target instanceof HTMLVideoElement && !event.target.paused) syncToButton(false);
     },
     true,
   );
+
+  installMediaSession();
+  setInterval(installMediaSession, 2000);
 }

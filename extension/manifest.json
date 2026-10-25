@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Music Media Key Guard",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Tells the media key guard when a YouTube Music tab is open, and controls playback while Remote Desktop is focused.",
   "permissions": ["tabs", "nativeMessaging", "scripting", "alarms", "storage"],
   "host_permissions": ["*://music.youtube.com/*"],
