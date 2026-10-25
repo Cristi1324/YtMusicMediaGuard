@@ -1,13 +1,13 @@
 # YouTube Music media key guard
 
-Windows tray app for [YouTube Music](https://music.youtube.com) in Chrome. While a YouTube Music tab is open anywhere in Chrome, Volume Up, Volume Down, and Mute change the player instead of Windows. Play, next, and previous keep using Chrome, unless a game or a Remote Desktop window is focused. The companion extension ships in the [`extension`](extension) folder and is loaded unpacked. It is not published in the Chrome Web Store.
+Windows tray app for [YouTube Music](https://music.youtube.com) in Chrome. While a YouTube Music tab is open anywhere in Chrome, Volume Up, Volume Down, and Mute from the keyboard change the player instead of Windows. The volume wheel on a Logitech Pro X 2 Lightspeed headset still changes Windows volume. Play, next, and previous keep using Chrome, unless a game or a Remote Desktop window is focused. The companion extension ships in the [`extension`](extension) folder and is loaded unpacked. It is not published in the Chrome Web Store.
 
 A Windows service cannot do this. Services run in Session 0 and never see the desktop keyboard, so this is a normal per-user app that stays in the notification area.
 
 ## What the keys do
 
-- Another app on this PC is focused: Play, next, and previous stay with Chrome. Volume Up, Volume Down, and Mute are taken from Windows and applied to the YouTube Music player.
-- A game is focused: every media key is taken and applied to the YouTube Music player. A window counts as a game when it covers its monitor, when Windows reports an exclusive fullscreen app, or when Windows Game Bar already knows that program. The first time a game running as administrator is focused, Windows asks permission once. Accept it. The tray app stays a normal user, and a small helper then forwards those keys.
+- Another app on this PC is focused: Play, next, and previous stay with Chrome. Volume Up, Volume Down, and Mute from the keyboard are taken from Windows and applied to the YouTube Music player. The Logitech Pro X 2 Lightspeed volume wheel is left alone.
+- A game is focused: every media key from the keyboard is taken and applied to the YouTube Music player. The Logitech Pro X 2 Lightspeed volume wheel still changes Windows volume. A window counts as a game when it covers its monitor, when Windows reports an exclusive fullscreen app, or when Windows Game Bar already knows that program. The first time a game running as administrator is focused, Windows asks permission once. Accept it. The tray app stays a normal user, and a small helper then forwards those keys.
 - Remote Desktop (`mstsc.exe`, `msrdc.exe`, or `vmconnect.exe`) is focused on this PC, with YouTube Music playing here: every media key stays on this PC. The extension presses play, next, previous, volume, or mute on the tab that is playing.
 - This PC is the Remote Desktop host and the key is pressed on the client: the key arrives in this session. Volume and mute go to the player. Play, next, and previous stay with Chrome.
 - No YouTube Music tab is open: every media key is passed through to Windows.
@@ -40,7 +40,7 @@ The first launch registers three things for the current user:
 
 - Sign-in startup: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\YtMusicMediaGuard`
 - Chrome native host: `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.ytmusic.mediaguard`
-- Settings: `%APPDATA%\YtMusicMediaGuard\config.json`
+- Settings: `%APPDATA%\YtMusicMediaGuard\config.json`. `HeadsetDetections` lists id or name fragments whose volume stays with Windows. `HeadsetExclusions` lists fragments that are left on the keyboard, such as `Keyboard` and `Mouse`.
 
 A balloon tip appears the first time. After that, look in the notification area. The icon may be under the overflow arrow next to the clock.
 
@@ -129,7 +129,7 @@ Press Volume Up or Volume Down. Windows volume should stay put and the YouTube M
 ## Limits
 
 - Some keyboard suites change the volume inside their own driver. The app puts the Windows volume back when it can see that change.
-- Headset buttons that use Bluetooth media control, rather than keyboard keys, still go to Windows.
+- The Logitech Pro X 2 Lightspeed receiver's volume wheel changes Windows volume. Headset buttons that never appear as keyboard keys also stay with Windows.
 - A discarded background tab counts as open, but nothing can control a player Chrome has not loaded.
 - While the guard is armed, volume and mute no longer reach other apps on this PC. Play, next, and previous still go to Chrome unless a game or a Remote Desktop window is focused.
 - Administrator games are handled by a helper that Windows starts after a one-time permission prompt. Headset buttons and keyboard suites that consume the key in their own driver are still invisible to the app.

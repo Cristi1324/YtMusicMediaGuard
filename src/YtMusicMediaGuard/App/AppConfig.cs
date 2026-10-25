@@ -11,6 +11,8 @@ internal sealed class AppConfig
     public string VolumeUp { get; set; } = "Ctrl+Alt+Shift+Up";
     public string VolumeDown { get; set; } = "Ctrl+Alt+Shift+Down";
     public string Mute { get; set; } = "Ctrl+Alt+Shift+M";
+    public string[] HeadsetDetections { get; set; } = (string[])VolumeHeadset.DefaultDetections.Clone();
+    public string[] HeadsetExclusions { get; set; } = (string[])VolumeHeadset.DefaultExclusions.Clone();
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
@@ -39,6 +41,8 @@ internal sealed class AppConfig
             var json = File.ReadAllText(AppPaths.ConfigFile);
             var loaded = JsonSerializer.Deserialize<AppConfig>(json, Options) ?? new AppConfig();
             loaded.Normalize();
+            if (!json.Contains("\"HeadsetDetections\"", StringComparison.Ordinal))
+                loaded.Save();
             return loaded;
         }
         catch (Exception ex)
@@ -56,6 +60,14 @@ internal sealed class AppConfig
         VolumeUp = Valid(VolumeUp, "Ctrl+Alt+Shift+Up");
         VolumeDown = Valid(VolumeDown, "Ctrl+Alt+Shift+Down");
         Mute = Valid(Mute, "Ctrl+Alt+Shift+M");
+        HeadsetDetections = Clean(HeadsetDetections, VolumeHeadset.DefaultDetections);
+        HeadsetExclusions = Clean(HeadsetExclusions, VolumeHeadset.DefaultExclusions);
+    }
+
+    private static string[] Clean(string[]? values, string[] fallback)
+    {
+        if (values is null) return (string[])fallback.Clone();
+        return values.Where(text => !string.IsNullOrWhiteSpace(text)).Select(text => text.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static string Valid(string? text, string fallback)

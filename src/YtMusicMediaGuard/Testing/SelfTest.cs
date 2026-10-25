@@ -35,6 +35,8 @@ internal static class SelfTest
             var expected = IntPtr.Size == 8 ? 40 : 28;
             if (ChordSender.InputSize != expected)
                 throw new InvalidOperationException($"INPUT size is {ChordSender.InputSize}, expected {expected}.");
+            if (HeadsetVolume.InjectedInputSize != expected)
+                throw new InvalidOperationException($"Headset input size is {HeadsetVolume.InjectedInputSize}, expected {expected}.");
         });
         Check(failures, "frame pipe", () =>
         {
@@ -45,6 +47,30 @@ internal static class SelfTest
             var read = FramePipe.Read(stream) ?? throw new InvalidOperationException("Frame was empty.");
             if (!payload.AsSpan().SequenceEqual(read))
                 throw new InvalidOperationException("Frame bytes did not round-trip.");
+        });
+        Check(failures, "headset volume", () =>
+        {
+            const string headset = @"\\?\HID#VID_046D&PID_0ABA&MI_00#7&abc&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}";
+            if (!VolumeHeadset.Matches(headset, null))
+                throw new InvalidOperationException("The Logitech Pro X receiver was not recognized.");
+            if (VolumeHeadset.Matches(@"\\?\HID#VID_046D&PID_C52B&MI_00#", "G915 Keyboard"))
+                throw new InvalidOperationException("A Logitech keyboard was treated as the headset.");
+            if (!VolumeHeadset.Matches(@"\\?\HID#VID_046D&PID_0AF7&MI_03&Col01#", null))
+                throw new InvalidOperationException("The Pro X 2 Lightspeed receiver was not recognized.");
+            if (VolumeHeadset.Matches(@"\\?\HID#VID_046D&PID_C53F&MI_01&Col02#", null))
+                throw new InvalidOperationException("The other Lightspeed receiver was treated as the headset.");
+            if (!VolumeHeadset.Matches(@"\\?\HID#VID_046D&PID_0B1B&MI_00#", "PRO X 2 LIGHTSPEED"))
+                throw new InvalidOperationException("A Pro X 2 Lightspeed receiver was not recognized.");
+            if (VolumeHeadset.Matches(@"\\?\HID#VID_046D&PID_C547&MI_00#", "PRO X Keyboard"))
+                throw new InvalidOperationException("A Pro X keyboard was treated as the headset.");
+            if (VolumeHeadset.Matches(@"\\?\HID#VID_046D&PID_C094&MI_00#", "PRO X SUPERLIGHT"))
+                throw new InvalidOperationException("A Pro X mouse was treated as the headset.");
+            if (VolumeHeadset.Matches(@"\\?\HID#VID_1234&PID_5678#", "Headset"))
+                throw new InvalidOperationException("A non-Logitech headset name was treated as the Pro X receiver.");
+            if (!VolumeHeadset.Matches(@"\\?\HID#VID_9999&PID_0001#", "Desk Headphones", ["Desk Headphones"], ["Keyboard"]))
+                throw new InvalidOperationException("A configured detection string was not recognized.");
+            if (VolumeHeadset.Matches(@"\\?\HID#VID_9999&PID_0001#", "Desk Keyboard", ["Desk"], ["Keyboard"]))
+                throw new InvalidOperationException("A configured exclusion did not reject the device.");
         });
         Check(failures, "keyboard hook", () =>
         {

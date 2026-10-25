@@ -9,6 +9,7 @@ internal sealed class KeyboardHook : IDisposable
     private readonly Control _invoker;
     private readonly HashSet<uint> _held = new();
         private IntPtr _hook;
+        private HeadsetVolume? _volume;
         private uint _threadId;
         private Thread? _thread;
         private System.Threading.Timer? _rehook;
@@ -35,6 +36,8 @@ internal sealed class KeyboardHook : IDisposable
             {
                 _threadId = GetCurrentThreadId();
                 SetThreadPriority(GetCurrentThread(), ThreadPriorityTimeCritical);
+                _volume = new HeadsetVolume(CommitCaptured);
+                _volume.Install();
                 _hook = SetWindowsHookEx(WhKeyboardLl, _proc, ModuleHandle(), 0);
                 if (_hook == IntPtr.Zero)
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "SetWindowsHookEx failed.");
@@ -60,6 +63,8 @@ internal sealed class KeyboardHook : IDisposable
             finally
             {
                 _installed = false;
+                _volume?.Dispose();
+                _volume = null;
                 if (_hook != IntPtr.Zero)
                 {
                     UnhookWindowsHookEx(_hook);
@@ -94,13 +99,20 @@ internal sealed class KeyboardHook : IDisposable
     {
         try
         {
-            if (code < 0 || IsActive?.Invoke() != true)
+            if (code < 0)
+                return CallNextHookEx(_hook, code, wParam, lParam);
+
+            var data = Marshal.PtrToStructure<KbdLlHook>(lParam);
+            if (HeadsetVolume.IsReplay(data.dwExtraInfo))
+                return CallNextHookEx(_hook, code, wParam, lParam);
+
+            if (IsActive?.Invoke() != true)
             {
                 if (_held.Count > 0) _held.Clear();
+                _volume?.ReleasePending();
                 return CallNextHookEx(_hook, code, wParam, lParam);
             }
 
-            var data = Marshal.PtrToStructure<KbdLlHook>(lParam);
             var action = ActionFor(data.vkCode);
             if (action is null)
                 return CallNextHookEx(_hook, code, wParam, lParam);
@@ -113,21 +125,32 @@ internal sealed class KeyboardHook : IDisposable
                 return CallNextHookEx(_hook, code, wParam, lParam);
 
             var keyUp = (data.flags & LlkhfUp) != 0 || (uint)wParam is WmKeyUp or WmSysKeyUp;
-            if (keyUp)
+            var volume = action is MediaAction.VolumeUp or MediaAction.VolumeDown or MediaAction.Mute;
+            var origin = _volume?.Classify(data.vkCode) ?? VolumeOrigin.Keyboard;
+            if (origin == VolumeOrigin.Headset)
+                return CallNextHookEx(_hook, code, wParam, lParam);
+            if (volume && origin == VolumeOrigin.Keyboard)
             {
-                _held.Remove(data.vkCode);
-            }
-            else
-            {
-                var repeat = !_held.Add(data.vkCode);
-                if (action is MediaAction.VolumeUp or MediaAction.VolumeDown or MediaAction.Mute)
-                    VolumeGuard.NoteMediaKey();
-                if (!repeat || action is MediaAction.VolumeUp or MediaAction.VolumeDown)
-                    Raise(action.Value);
+                CommitCaptured(action.Value, data.vkCode, keyUp);
+                return 1;
             }
 
+            if (volume)
+            {
+                // Held back until the device is known, so a keyboard does not move
+                // Windows volume and then have that change undone.
+                _volume?.Defer(action.Value, data.vkCode, keyUp, passedToWindows: false);
+                return 1;
+            }
+
+            if (origin == VolumeOrigin.Unknown)
+            {
+                _volume?.Defer(action.Value, data.vkCode, keyUp, passedToWindows: false);
+                return 1;
+            }
+
+            CommitCaptured(action.Value, data.vkCode, keyUp);
             // Client keyboards arrive through Remote Desktop with LLKHF_INJECTED set.
-            // Media keys are never injected by this app, so swallowing injected ones does not loop.
             return 1;
         }
         catch (Exception ex)
@@ -135,6 +158,21 @@ internal sealed class KeyboardHook : IDisposable
             Logger.Error("Hook callback failed: " + ex.Message);
             return CallNextHookEx(_hook, code, wParam, lParam);
         }
+    }
+
+    private void CommitCaptured(MediaAction action, uint vk, bool keyUp)
+    {
+        if (keyUp)
+        {
+            _held.Remove(vk);
+            return;
+        }
+
+        var repeat = !_held.Add(vk);
+        if (action is MediaAction.VolumeUp or MediaAction.VolumeDown or MediaAction.Mute)
+            VolumeGuard.NoteMediaKey();
+        if (!repeat || action is MediaAction.VolumeUp or MediaAction.VolumeDown)
+            Raise(action);
     }
 
     private void Raise(MediaAction action)
